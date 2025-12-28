@@ -1,28 +1,41 @@
 import re
-import string
 import nltk
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
-import os
 import pandas as pd
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-factory = StemmerFactory()
-stemmer = factory.create_stemmer()
+__all__ = [
+    "read_data",
+    "preprocessing",
+    "cleaning_text",
+    "tokenizing",
+    "stemming",
+    "remove_stopward",
+    "normalize_text",
+    "normalize_slang",
+]
+
+_factory = StemmerFactory()
+_stemmer = _factory.create_stemmer()
 
 nltk.download('stopwords')
-stop_words = set(stopwords.words('indonesian'))
+nltk.download('punkt_tab')
+_stop_words = set(stopwords.words('indonesian'))
+
+def read_data(file):
+    data = pd.read_csv(file)
+    return data
 
 def preprocessing(text):
     text = cleaning_text(text)
     text = normalize_text(text)
     text = tokenizing(text)
-    text = filtering(text)
     text = stemming(text)
     text = remove_stopward(text)
     return text
 
-def cleaning_text(teks:str):
+def cleaning_text(teks:str)->str:
     teks = str(teks).lower()
     teks = re.sub(r"http\S+|www\S+|https\S+", '', teks)
     teks = re.sub(r'[^a-z\s]', '', teks)
@@ -30,37 +43,32 @@ def cleaning_text(teks:str):
     teks = re.sub(r'http\S+|@\w+|#\w+', '', teks)
     teks = re.sub(r'[^\w\s]', '', teks)
     teks = re.sub(r'(.)\1{2,}', r'\1', teks) # Repeated Character Normalization
-    teks = teks.translate(str.maketrans('', '', string.punctuation))
-    teks = ' '.join([kata for kata in teks.split() if kata not in stop_words])
     return teks
 
-def tokenizing(text):
-    text = word_tokenize(text)
+def tokenizing(teks ):
+    """ Membagi sebuah kalimat menjadi kata satu per satu """
+    text = word_tokenize(teks)
     return text
 
-def filtering(text):
-    clean_words = []
-    for word in text:
-        if word not in stop_words:
-            clean_words.append(word)
-    return " ".join(clean_words)
-
 def stemming(text):
-    text = stemmer.stem(text)
+    """ Menghilangkan imbuhan akhir dari tiap kata """
+    text = _stemmer.stem(text)
     return text
 
 def remove_stopward(text):
-    stop_words = set(stopwords.words('indonesian'))
-    word_tokens = word_tokenize(text)
-    filtered_text = [word for word in word_tokens if word not in stop_words]
-    return  ''.join(filtered_text)
+    """ Menghilangkan kata yang kurang memiliki makna seperti kata sambung """
 
-def normalize_text(text):
+    word_tokens = word_tokenize(text)
+    filtered_text = [word for word in word_tokens if word not in _stop_words]
+    return  ' '.join(filtered_text)
+
+def normalize_text(text:str)->str:
     text = normalize_slang(text)
     return text
 
-def load_slang_dict(path: str) -> dict[str, str]:
+def load_slang_dict(path: str):
     # dropna = remove missing value from dataframe
+    # dict = key value pairs object
     df = pd.read_csv(path)
     df = df.dropna()
     return {
@@ -68,10 +76,11 @@ def load_slang_dict(path: str) -> dict[str, str]:
         for slang, formal in zip(df["slang"], df["formal"])
     }
 
-load_data = load_slang_dict("data/slang.csv")
+_load_data = load_slang_dict("data/slang.csv")
 
 def normalize_slang(text: str) -> str:
+    """ Mengubah kata slang menjadi kata baku berdasarkan kamus """
     return " ".join(
-        load_data.get(word, word)
+        _load_data.get(word, word)
         for word in text.split()
     )
