@@ -1,0 +1,19 @@
+### Decorators
+
+Pada python, decorators berfungsi sebagai pembungkus (wrapper) fungsi supaya bisa menambahkan perilaku baru tanpa
+mengubah kode aslinya
+
+def my_decorator(func):
+    def wrapper():
+        print("Sebelum fungsi dijalankan")
+        func()
+        print("Sesudah fungsi dijalankan")
+    return wrapper
+
+@my_decorator
+def say_hello():
+    print("Hello!")
+
+say_hello()
+
+Berdasarkan kode diatas, function say_hello digunakan sebagai parameter dari function my_decorator, maka func say_hello dijalankan pada saat print pertama selesai dieksekusi.

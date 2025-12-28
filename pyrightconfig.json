@@ -1,0 +1,8 @@
+{
+  "venvPath": "/home/habib/py_env",
+  "venv": "myenv",
+  "pythonVersion": "3.13",
+  "reportUnusedFunction": "none",
+  "reportUnusedVariable": "warning",
+  "reportUnusedImport": "warning",
+}
