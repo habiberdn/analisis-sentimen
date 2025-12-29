@@ -21,7 +21,6 @@ st.markdown("""
 st.markdown("""
 <div class="center-container">
     <h2>Selamat Datang Pada Aplikasi Analisis Sentimen</h2>
-    <p>Pengembangan applikasi ini dilakukan untuk mengambil opini seorang individu atau kelompok terhadap suatu kasus atau isu yang ada pada sosial media X. Opini tersebut akan dianalisis menggunakan pendekatan teknik Natural Language Processing dengan metode Naive Bayes Classifier.</p>
+    <p>Pengembangan applikasi ini dilakukan untuk menghasilkan sebuah sentimen dari suatu opini berdasarkan suatu isu atau kasus pada sosial media X. Opini tersebut akan dianalisis menggunakan pendekatan teknik Natural Language Processing dengan metode Naive Bayes Classifier.</p>
 </div>
 """, unsafe_allow_html=True)
-
