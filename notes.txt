@@ -17,3 +17,14 @@ def say_hello():
 say_hello()
 
 Berdasarkan kode diatas, function say_hello digunakan sebagai parameter dari function my_decorator, maka func say_hello dijalankan pada saat print pertama selesai dieksekusi.
+
+# Simpan model training
+
+import joblib
+
+joblib.dump(model, "model.pkl")
+joblib.dump(vectorizer, "vectorizer.pkl")
+
+# Load model training
+model = joblib.load("model.pkl")
+vectorizer = joblib.load("vectorizer.pkl")

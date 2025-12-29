@@ -12,7 +12,6 @@ __all__ = [
     "tokenizing",
     "stemming",
     "remove_stopword",
-    "normalize_text",
     "normalize_slang",
     "preprocessing_batch"
 ]
@@ -51,7 +50,7 @@ def preprocessing(text):
         5. Stopword Removal
     """
     cleaned = cleaning_text(text)
-    normalized = normalize_text(cleaned)
+    normalized = normalize_slang(cleaned)
     tokenized = tokenizing(normalized)
     stemmed = stemming(tokenized)
     stopword = remove_stopword(stemmed)
@@ -77,7 +76,7 @@ def preprocessing_batch(df: pd.DataFrame, text_column: str = 'full_text') -> pd.
     df['cleaned'] = df['cleaned'].str.replace(r'(.)\1{2,}', r'\1', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'\s+', ' ', regex=True).str.strip()
 
-    df['normalized'] = df['cleaned'].apply(normalize_text)
+    df['normalized'] = df['cleaned'].apply(normalize_slang)
     df['tokenized'] = df['normalized'].apply(tokenizing)
     df['stemmed'] = df['tokenized'].apply(stemming)
     df['stopword'] = df['stemmed'].apply(remove_stopword)
@@ -100,8 +99,7 @@ def tokenizing(teks):
 
 def stemming(text):
     """ Menghilangkan imbuhan akhir dari tiap kata """
-    words = text.split()
-    stemmed_words = [_stemmer.stem(word) for word in words]
+    stemmed_words = [_stemmer.stem(word) for word in text]
     return ' '.join(stemmed_words)
 
 def remove_stopword(text):
@@ -109,10 +107,6 @@ def remove_stopword(text):
 
     filtered_text = [word for word in text if word not in _stop_words]
     return  ' '.join(filtered_text)
-
-def normalize_text(text:str)->str:
-    return normalize_slang(text)
-
 
 def normalize_slang(text: str) -> str:
     """ Mengubah kata slang menjadi kata baku berdasarkan kamus """
