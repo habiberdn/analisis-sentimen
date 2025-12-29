@@ -11,29 +11,77 @@ __all__ = [
     "cleaning_text",
     "tokenizing",
     "stemming",
-    "remove_stopward",
+    "remove_stopword",
     "normalize_text",
     "normalize_slang",
+    "preprocessing_batch"
 ]
 
 _factory = StemmerFactory()
 _stemmer = _factory.create_stemmer()
 
-nltk.download('stopwords')
-nltk.download('punkt_tab')
+nltk.download('stopwords',quiet=True)
+nltk.download('punkt_tab',quiet=True)
+
 _stop_words = set(stopwords.words('indonesian'))
 
+# Load slang dictionary once
+def load_slang_dict(path: str) -> dict:
+    """Load slang dictionary from CSV"""
+    df = pd.read_csv(path)
+    df = df.dropna()
+    return {
+        str(slang).strip().lower(): str(formal).strip().lower()
+        for slang, formal in zip(df["slang"], df["formal"])
+    }
+
+_slang_dict = load_slang_dict("data/slang.csv")
+
 def read_data(file):
-    data = pd.read_csv(file)
-    return data
+    return pd.read_csv(file)
 
 def preprocessing(text):
-    text = cleaning_text(text)
-    text = normalize_text(text)
-    text = tokenizing(text)
-    text = stemming(text)
-    text = remove_stopward(text)
-    return text
+    # Untuk satu text
+    """
+    Sequence :
+        1. Cleaning
+        2. Normalization (slang → formal)
+        3. Tokenization
+        4. Stemming
+        5. Stopword Removal
+    """
+    cleaned = cleaning_text(text)
+    normalized = normalize_text(cleaned)
+    tokenized = tokenizing(normalized)
+    stemmed = stemming(tokenized)
+    stopword = remove_stopword(stemmed)
+
+    return {
+            "cleaned": cleaned,
+            "normalized": normalized,
+            "tokenized": tokenized,
+            "stopword": stopword,
+            "stemmed": stemmed,
+        }
+
+def preprocessing_batch(df: pd.DataFrame, text_column: str = 'full_text') -> pd.DataFrame:
+    """
+    Optimized batch preprocessing for entire DataFrame.
+    Much faster than applying row by row. (For multiple text)
+    """
+    # Vectorized operations where possible
+    df['cleaned'] = df[text_column].astype(str).str.lower()
+    df['cleaned'] = df['cleaned'].str.replace(r"http\S+|www\S+|https\S+", '', regex=True)
+    df['cleaned'] = df['cleaned'].str.replace(r'@\w+|#\w+', '', regex=True)
+    df['cleaned'] = df['cleaned'].str.replace(r'[^a-z\s]', '', regex=True)
+    df['cleaned'] = df['cleaned'].str.replace(r'(.)\1{2,}', r'\1', regex=True)
+    df['cleaned'] = df['cleaned'].str.replace(r'\s+', ' ', regex=True).str.strip()
+
+    df['normalized'] = df['cleaned'].apply(normalize_text)
+    df['tokenized'] = df['normalized'].apply(tokenizing)
+    df['stemmed'] = df['tokenized'].apply(stemming)
+    df['stopword'] = df['stemmed'].apply(remove_stopword)
+    return df
 
 def cleaning_text(teks:str)->str:
     teks = str(teks).lower()
@@ -45,42 +93,30 @@ def cleaning_text(teks:str)->str:
     teks = re.sub(r'(.)\1{2,}', r'\1', teks) # Repeated Character Normalization
     return teks
 
-def tokenizing(teks ):
+def tokenizing(teks):
     """ Membagi sebuah kalimat menjadi kata satu per satu """
     text = word_tokenize(teks)
     return text
 
 def stemming(text):
     """ Menghilangkan imbuhan akhir dari tiap kata """
-    text = _stemmer.stem(text)
-    return text
+    words = text.split()
+    stemmed_words = [_stemmer.stem(word) for word in words]
+    return ' '.join(stemmed_words)
 
-def remove_stopward(text):
+def remove_stopword(text):
     """ Menghilangkan kata yang kurang memiliki makna seperti kata sambung """
 
-    word_tokens = word_tokenize(text)
-    filtered_text = [word for word in word_tokens if word not in _stop_words]
+    filtered_text = [word for word in text if word not in _stop_words]
     return  ' '.join(filtered_text)
 
 def normalize_text(text:str)->str:
-    text = normalize_slang(text)
-    return text
+    return normalize_slang(text)
 
-def load_slang_dict(path: str):
-    # dropna = remove missing value from dataframe
-    # dict = key value pairs object
-    df = pd.read_csv(path)
-    df = df.dropna()
-    return {
-        str(slang).strip(): str(formal).strip()
-        for slang, formal in zip(df["slang"], df["formal"])
-    }
-
-_load_data = load_slang_dict("data/slang.csv")
 
 def normalize_slang(text: str) -> str:
     """ Mengubah kata slang menjadi kata baku berdasarkan kamus """
     return " ".join(
-        _load_data.get(word, word)
+        _slang_dict.get(word, word)
         for word in text.split()
     )
