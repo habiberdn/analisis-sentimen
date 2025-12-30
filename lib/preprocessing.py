@@ -37,7 +37,13 @@ def load_slang_dict(path: str) -> dict:
 _slang_dict = load_slang_dict("data/slang.csv")
 
 def read_data(file):
-    return pd.read_csv(file)
+    df = pd.read_csv(file)
+    df = (
+        df.drop_duplicates(subset="full_text")
+          .dropna(subset=["full_text"])
+          .reset_index(drop=True)
+    )
+    return df
 
 def preprocessing(text):
     # Untuk satu text
