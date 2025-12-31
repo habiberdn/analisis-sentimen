@@ -105,8 +105,7 @@ def tokenizing(teks):
 
 def stemming(text):
     """ Menghilangkan imbuhan akhir dari tiap kata """
-    stemmed_words = [_stemmer.stem(word) for word in text]
-    return ' '.join(stemmed_words)
+    return [_stemmer.stem(word) for word in text]
 
 def remove_stopword(text):
     """ Menghilangkan kata yang kurang memiliki makna seperti kata sambung """
