@@ -4,6 +4,26 @@ from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 import pandas as pd
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+from lib.lexicon import lexicon_score, score_to_label
+
+# ============= DATA LOADING =============
+positive_df = pd.read_csv("data/positive.csv")
+negative_df = pd.read_csv("data/negative.csv")
+
+positive_words = positive_df['word'].str.lower().tolist()
+negative_words = negative_df['word'].str.lower().tolist()
+
+_factory = StemmerFactory()
+_stemmer = _factory.create_stemmer()
+# Build lexicon dictionary
+lexicon = {}
+for word in positive_words:
+    stemmed = _stemmer.stem(word)
+    lexicon[stemmed] = 1  # Positif
+
+for word in negative_words:
+    stemmed = _stemmer.stem(word)
+    lexicon[stemmed] = -1
 
 __all__ = [
     "read_data",
@@ -16,15 +36,14 @@ __all__ = [
     "preprocessing_batch"
 ]
 
-_factory = StemmerFactory()
-_stemmer = _factory.create_stemmer()
+nltk.download('stopwords', quiet=True)
+nltk.download('punkt_tab', quiet=True)
 
-nltk.download('stopwords',quiet=True)
-nltk.download('punkt_tab',quiet=True)
+# Preserve negation words for sentiment analysis
+_stop_words = set(stopwords.words('indonesian')) - {
+    "tidak", "bukan", "belum", "kurang", "tanpa", "jangan"
+}
 
-_stop_words = set(stopwords.words('indonesian'))
-
-# Load slang dictionary once
 def load_slang_dict(path: str) -> dict:
     """Load slang dictionary from CSV"""
     df = pd.read_csv(path)
@@ -46,10 +65,11 @@ def read_data(file):
     return df
 
 def preprocessing(text):
-    # Untuk satu text
     """
-    Sequence :
-        1. Cleaning
+    Single text preprocessing pipeline
+
+    Sequence:
+        1. Cleaning (lowercase, remove URLs, special chars)
         2. Normalization (slang → formal)
         3. Tokenization
         4. Stemming
@@ -59,62 +79,73 @@ def preprocessing(text):
     normalized = normalize_slang(cleaned)
     tokenized = tokenizing(normalized)
     stemmed = stemming(tokenized)
-    stopword = remove_stopword(stemmed)
+    stopword_removed = remove_stopword(stemmed)
 
     return {
-            "cleaned": cleaned,
-            "normalized": normalized,
-            "tokenized": tokenized,
-            "stopword": stopword,
-            "stemmed": stemmed,
-        }
+        "cleaned": cleaned,
+        "normalized": normalized,
+        "tokenized": tokenized,
+        "stemmed": stemmed,
+        "stopword": stopword_removed,
+    }
 
 def preprocessing_batch(df: pd.DataFrame, text_column: str = 'full_text') -> pd.DataFrame:
     """
     Optimized batch preprocessing for entire DataFrame.
-    Much faster than applying row by row. (For multiple text)
+    Much faster than row-by-row processing.
     """
-    # Vectorized operations where possible
+    # Vectorized cleaning operations
     df['cleaned'] = df[text_column].astype(str).str.lower()
     df['cleaned'] = df['cleaned'].str.replace(r"http\S+|www\S+|https\S+", '', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'@\w+|#\w+', '', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'[^a-z\s]', '', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'(.)\1{2,}', r'\1', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'\s+', ' ', regex=True).str.strip()
-
+    df = (
+        df.drop_duplicates(subset="cleaned")
+          .dropna(subset=["cleaned"])
+          .reset_index(drop=True)
+    )
     df['normalized'] = df['cleaned'].apply(normalize_slang)
     df['tokenized'] = df['normalized'].apply(tokenizing)
     df['stemmed'] = df['tokenized'].apply(stemming)
     df['stopword'] = df['stemmed'].apply(remove_stopword)
+
+    df['lexicon_score'] = df['stopword'].apply(
+        lambda x: lexicon_score(x, lexicon)
+    )
+    df['target'] = df['lexicon_score'].apply(score_to_label)
+    df['lexicon_score'].value_counts().sort_index()
+
     return df
 
-def cleaning_text(teks:str)->str:
+# ============= HELPER FUNCTIONS =============
+def cleaning_text(teks: str) -> str:
+    """Remove URLs, mentions, hashtags, special characters, and normalize repeated chars"""
     teks = str(teks).lower()
-    teks = re.sub(r"http\S+|www\S+|https\S+", '', teks)
+    teks = re.sub(r"http\S+|www\S+|https\S+|@\w+|#\w+", '', teks)
     teks = re.sub(r'[^a-z\s]', '', teks)
-    teks = re.sub(r'[^\w\s]', '', teks) #hapus tanda baca (seperti !)
-    teks = re.sub(r'http\S+|@\w+|#\w+', '', teks)
-    teks = re.sub(r'[^\w\s]', '', teks)
-    teks = re.sub(r'(.)\1{2,}', r'\1', teks) # Repeated Character Normalization
+    teks = re.sub(r'(.)\1{2,}', r'\1', teks)
+    teks = re.sub(r'\s+', ' ', teks).strip()
     return teks
 
 def tokenizing(teks):
-    """ Membagi sebuah kalimat menjadi kata satu per satu """
-    text = word_tokenize(teks)
-    return text
+    """Split text into individual words"""
+    return word_tokenize(teks)
 
 def stemming(text):
-    """ Menghilangkan imbuhan akhir dari tiap kata """
-    return [_stemmer.stem(word) for word in text]
+    """Remove affixes from words using Sastrawi stemmer"""
+    stemmed = [_stemmer.stem(word) for word in text]
+    return " ".join(stemmed)
 
 def remove_stopword(text):
-    """ Menghilangkan kata yang kurang memiliki makna seperti kata sambung """
-
-    filtered_text = [word for word in text if word not in _stop_words]
-    return  ' '.join(filtered_text)
+    """Remove common words that don't carry sentiment (except negations)"""
+    words = text.split()
+    filtered_text = [word for word in words if word not in _stop_words]
+    return ' '.join(filtered_text)
 
 def normalize_slang(text: str) -> str:
-    """ Mengubah kata slang menjadi kata baku berdasarkan kamus """
+    """Convert slang words to formal Indonesian based on dictionary"""
     return " ".join(
         _slang_dict.get(word, word)
         for word in text.split()
