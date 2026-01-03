@@ -72,8 +72,7 @@ elif auth_status is True:
              st.Page("pages/home.py", title="Home"),
              st.Page("pages/scrape_page.py", title="Scrapping"),
              st.Page("pages/processing_page.py", title="Preprocess"),
-             st.Page("pages/analyze_page.py", title="Analyze"),
-             st.Page("pages/result_page.py", title="Result"),
+             st.Page("pages/analyze_page.py", title="Classification"),
          ],
          position="sidebar"
     )
