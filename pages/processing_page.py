@@ -22,7 +22,7 @@ if st.session_state['uploaded_file'] is not None:
     try:
         data = read_data(st.session_state['uploaded_file'])
         with st.expander("👀 Preview Data (5 Baris Pertama)"):
-            st.dataframe(data, use_container_width=True)
+            st.dataframe(data.head(5), use_container_width=True)
 
         # Mengembalikan posisi pointer ke posisi awal agar bisa membaca file
         st.session_state['uploaded_file'].seek(0)
@@ -39,30 +39,26 @@ if st.session_state['uploaded_file'] is not None:
                 st.info(f"Kolom yang tersedia: {', '.join(data.columns)}")
                 st.stop()
             st.success(f"✅ Memuat {len(data):,} Baris")
-            # Show processing animation
-            with st.spinner("🔄 Processing data using optimized batch method..."):
-                # Progress container
-                progress_container = st.container()
+            
+            # Progress container
+            progress_container = st.container()
 
-                with progress_container:
-                    progress_bar = st.progress(0)
-                    status_text = st.empty()
+            with progress_container:
+                progress_bar = st.progress(0)
+                status_text = st.empty()
 
-                    # Update progress manually during processing
-                    progress_bar.progress(0.1)
+                progress_bar.progress(0.1)
 
-                    # Call the optimized batch function
-                    processed_data = preprocessing_batch(
-                        df=data,
-                        text_column='full_text'
-                    )
+                processed_data = preprocessing_batch(
+                    df=data,
+                    text_column='full_text'
+                )
 
+                progress_bar.progress(1.0)
 
-                    progress_bar.progress(1.0)
-
-                st.session_state['processed_data'] = processed_data
-                st.success("Text preprocessing completed successfully!")
-
+            st.session_state['processed_data'] = processed_data
+            st.success("Text preprocessing completed successfully!")
+            
         except Exception as e:
             st.error(f"❌ Error during preprocessing: {str(e)}")
             import traceback
@@ -193,7 +189,7 @@ if st.session_state['processed_data'] is not None:
                 after_words = set(str(row['stopword']).split())
                 removed = before_words - after_words
                 all_removed.extend(list(removed))
-                
+
             if all_removed:
                 from collections import Counter
                 # Count the frequency of each removed word (stopwords)
@@ -242,7 +238,6 @@ if st.session_state['processed_data'] is not None:
         # Sample comparison
         st.markdown("### 🔬 Sample Text Transformation")
         sample_idx = st.selectbox("Select sample to view:", range(min(20, len(data))))
-
         if sample_idx < len(data):
             sample = data.iloc[sample_idx]
 
