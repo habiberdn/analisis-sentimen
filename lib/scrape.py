@@ -4,8 +4,11 @@ import io
 
 def scrape_tweets(auth_token : str, keyword :str , limit : int ):
     filename = "cek_kesehatan_gratis.csv"
+    
+    npx_path = r"C:\Program Files\nodejs\npx.cmd"
     cmd = [
-        "npx",
+        # gunakan npx path untuk windows, jika linux gunakan "npx"
+        npx_path,
         "-y",
         "tweet-harvest@2.6.1",
         "-o", filename,
@@ -19,7 +22,6 @@ def scrape_tweets(auth_token : str, keyword :str , limit : int ):
 
     file_path = f"tweets-data/{filename}"
 
-    # Read the CSV file into a pandas DataFrame
     df = pd.read_csv(file_path, delimiter=",")
     return df
 
