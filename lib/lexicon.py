@@ -1,7 +1,14 @@
 def lexicon_score(text: str, lexicon: dict) -> int:
     score = 0
-    for word in text.split():
-        score += lexicon.get(word, 0)
+    text = text.lower()
+
+    for term, weight in lexicon.items():
+        if " " in term:  # frasa
+            if term in text:
+                score += weight
+        else:  # kata tunggal
+            score += text.split().count(term) * weight
+
     return score
 
 
