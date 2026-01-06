@@ -31,7 +31,6 @@ def load_config():
         return yaml.load(file, Loader=SafeLoader)
 
 config = load_config()
-
 authenticator = stauth.Authenticate(
     config["credentials"],
     config["cookie"]["name"],
@@ -46,6 +45,21 @@ auth_status = st.session_state.get("authentication_status")
 # Handle Authentication
 if auth_status is False:
     st.error("Username atau password salah")
+    st.markdown(
+        """
+        <style>
+        /* Hide the sidebar itself */
+        [data-testid="stSidebar"] {
+            display: none;
+        }
+        /* Hide the button to expand/collapse the sidebar */
+        [data-testid="collapsedControl"] {
+            display: none;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
 
 elif auth_status is None:
     st.info("Silakan login untuk melanjutkan")
