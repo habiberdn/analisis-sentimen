@@ -5,7 +5,6 @@ import pandas as pd
 
 st.title("Text Preprocessing")
 
-# Initialization
 if 'uploaded_file' not in st.session_state:
     st.session_state['uploaded_file'] = None
 if 'processed_data' not in st.session_state:
@@ -13,23 +12,20 @@ if 'processed_data' not in st.session_state:
 
 file_upload =st.file_uploader("Uplaod CSV")
 
-# Check file is upload
 if file_upload is not None:
     st.session_state['uploaded_file'] = file_upload
 
-# Preview Data
 if st.session_state['uploaded_file'] is not None:
     try:
         data = read_data(st.session_state['uploaded_file'])
         with st.expander("👀 Preview Data (5 Baris Pertama)"):
-            st.dataframe(data.head(5), use_container_width=True)
+            st.dataframe(data.head(5), width="stretch")
 
         # Mengembalikan posisi pointer ke posisi awal agar bisa membaca file
         st.session_state['uploaded_file'].seek(0)
     except Exception as e:
         st.warning(f"Could not preview data: {e}")
 
-    # Preprocessing action
     if st.button("Mulai Preprocessing"):
         try:
             with st.spinner("Loading data..."):
@@ -39,8 +35,7 @@ if st.session_state['uploaded_file'] is not None:
                 st.info(f"Kolom yang tersedia: {', '.join(data.columns)}")
                 st.stop()
             st.success(f"✅ Memuat {len(data):,} Baris")
-            
-            # Progress container
+
             progress_container = st.container()
 
             with progress_container:
@@ -49,16 +44,13 @@ if st.session_state['uploaded_file'] is not None:
 
                 progress_bar.progress(0.1)
 
-                processed_data = preprocessing_batch(
-                    df=data,
-                    text_column='full_text'
-                )
+                processed_data = preprocessing_batch(data)
 
                 progress_bar.progress(1.0)
 
             st.session_state['processed_data'] = processed_data
             st.success("Text preprocessing completed successfully!")
-            
+
         except Exception as e:
             st.error(f"❌ Error during preprocessing: {str(e)}")
             import traceback
@@ -74,20 +66,19 @@ if st.session_state['processed_data'] is not None:
         with col1:
             st.markdown("**🔴 Original**")
             st.dataframe(
-                data[['full_text']].head(10),
-                use_container_width=True,
+                data['full_text'].head(10),
+                width="stretch",
                 height=400
             )
         with col2:
             st.markdown("**🟢 Cleaned**")
             st.dataframe(
-                data[['cleaned']].head(10),
-                use_container_width=True,
+                data[['cleaned']],
+                width="stretch",
                 height=400
             )
 
     with tab2:
-        # Mengambil text yang berubah akibat normalisasi
         normalized_texts = data[data['cleaned'] != data['normalized']]
 
         if len(normalized_texts) > 0:
@@ -98,14 +89,14 @@ if st.session_state['processed_data'] is not None:
                 st.markdown("**Sebelum Normalization**")
                 st.dataframe(
                     normalized_texts[['cleaned']].head(10),
-                    use_container_width=True,
+                    width="stretch",
                     height=400
                 )
             with col2:
                 st.markdown("**Setelah Normalization**")
                 st.dataframe(
                     normalized_texts[['normalized']].head(10),
-                    use_container_width=True,
+                    width="stretch",
                     height=400
                 )
         else:
@@ -113,7 +104,7 @@ if st.session_state['processed_data'] is not None:
 
     with tab3:
         # Calculate token statistics
-        data['token_count'] = data['tokenized'].str.len()
+        data['token_count'] = data['tokenized'].apply(len)
 
         col1, col2 = st.columns(2)
         with col1:
@@ -125,8 +116,12 @@ if st.session_state['processed_data'] is not None:
 
         # Show comparison
         st.markdown("**Perbandingan Text :**")
-        comparison_df = data[['normalized', 'tokenized', 'token_count']].head(10)
-        st.dataframe(comparison_df, use_container_width=True)
+        comparison_df = pd.DataFrame({
+            "Normalized": data['normalized'].head(10),
+            "Tokenized": data['tokenized'].head(10).apply(lambda x: ' '.join(x)),
+            "Token Count": data['token_count'].head(10)
+        })
+        st.dataframe(comparison_df, width="stretch")
 
     # Tab 4: Stemmed
     with tab4:
@@ -137,66 +132,84 @@ if st.session_state['processed_data'] is not None:
         with col1:
             st.markdown("**Before Stemming**")
             st.dataframe(
-                data[['tokenized']].head(10),
-                use_container_width=True,
+                data['tokenized']
+                    .head(10)
+                    .apply(lambda x: ' '.join(x))
+                    .to_frame(name="tokenized"),
+                width="stretch",
                 height=400
             )
         with col2:
             st.markdown("**After Stemming**")
             st.dataframe(
                 data[['stemmed']].head(10),
-                use_container_width=True,
+                width="stretch",
                 height=400
             )
 
     # Tab 5: Stopwords Removed (Final)
     with tab5:
-        st.subheader("Step 5: Final Text (Stopwords Removed)")
+        st.subheader("Step 5: Stopword Removal")
         st.markdown("**Operation:** Remove common words with little semantic meaning")
-
-        # Calculate word reduction
-        data['words_with_stopwords'] = data['stemmed'].str.split().str.len()
-        data['words_without_stopwords'] = data['stopword'].str.split().str.len()
-        data['words_removed'] = data['words_with_stopwords'] - data['words_without_stopwords']
-
-        # Statistics
+    
+        data['words_before_stopword'] = data['tokenized'].apply(len)
+        data['words_after_stopword'] = data['stopword'].apply(len)
+        data['words_removed'] = (
+            data['words_before_stopword'] - data['words_after_stopword']
+        )
+    
         col1, col2, col3 = st.columns(3)
+    
         with col1:
-            total_before = data['words_with_stopwords'].sum()
+            total_before = data['words_before_stopword'].sum()
             st.metric("📊 Words Before", f"{total_before:,}")
+    
         with col2:
-            total_after = data['words_without_stopwords'].sum()
+            total_after = data['words_after_stopword'].sum()
             st.metric("📊 Words After", f"{total_after:,}")
+    
         with col3:
-            reduction_pct = ((total_before - total_after) / total_before * 100)
+            reduction_pct = (
+                (total_before - total_after) / total_before * 100
+                if total_before > 0 else 0
+            )
             st.metric("📉 Reduction", f"{reduction_pct:.1f}%")
-
-        # Show comparison
-        st.markdown("**Final Results:**")
+    
+        st.markdown("**Sample Results:**")
+    
         comparison_df = data[[
-            'stemmed',
+            'tokenized',
             'stopword',
             'words_removed'
         ]].head(10)
-        comparison_df.columns = ['With Stopwords', 'Without Stopwords', 'Words Removed']
-        st.dataframe(comparison_df, use_container_width=True)
-
-        # Top removed words
+    
+        comparison_df.columns = [
+            'Before Stopword Removal',
+            'After Stopword Removal',
+            'Words Removed'
+        ]
+    
+        st.dataframe(comparison_df, width="stretch")
+    
         with st.expander("🔍 Most Removed Stopwords"):
             all_removed = []
-            for idx, row in data.iterrows():
-                before_words = set(str(row['stemmed']).split())
-                after_words = set(str(row['stopword']).split())
+    
+            for _, row in data.iterrows():
+                before_words = set(row['tokenized'])
+                after_words = set(row['stopword'])
                 removed = before_words - after_words
-                all_removed.extend(list(removed))
-
+                all_removed.extend(removed)
+    
             if all_removed:
                 from collections import Counter
-                # Count the frequency of each removed word (stopwords)
                 top_removed = Counter(all_removed).most_common(20)
-                removed_df = pd.DataFrame.from_records(top_removed, columns=['Word', 'Frequency'])
+    
+                removed_df = pd.DataFrame(
+                    top_removed,
+                    columns=['Word', 'Frequency']
+                )
+    
                 st.bar_chart(removed_df.set_index('Word'))
-
 
     # Tab 6: Overview
     with tab6:
@@ -223,13 +236,13 @@ if st.session_state['processed_data'] is not None:
 
         pipeline_stats = pd.DataFrame({
             'Stage': ['Original', 'Cleaned', 'Normalized', 'Tokenized', 'Stemmed', 'Final'],
-            'Avg Length (chars)': [
+            'Avg Length': [
                 data['full_text'].str.len().mean(),
                 data['cleaned'].str.len().mean(),
                 data['normalized'].str.len().mean(),
-                data['tokenized'].str.len().mean(),
-                data['stemmed'].str.len().mean(),
-                data['stopword'].str.len().mean()
+                data['tokenized'].apply(len).mean(),
+                data['stemmed'].str.split().apply(len).mean(),
+                data['stopword'].apply(len).mean()
             ]
         })
 
@@ -245,9 +258,9 @@ if st.session_state['processed_data'] is not None:
                 "1️⃣ Original": sample['full_text'],
                 "2️⃣ Cleaned": sample['cleaned'],
                 "3️⃣ Normalized": sample['normalized'],
-                "4️⃣ Tokenized": sample['tokenized'],
+                "4️⃣ Tokenized": ' '.join(sample['tokenized']),
                 "5️⃣ Stemmed": sample['stemmed'],
-                "6️⃣ Final": sample['stopword']
+                "6️⃣ Final":' '.join(sample['stopword'])
             }
 
             for stage, text in stages.items():
@@ -266,7 +279,7 @@ if st.session_state['processed_data'] is not None:
                 data=csv_full,
                 file_name="preprocessed_full.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )
 
         with col2:
@@ -278,7 +291,7 @@ if st.session_state['processed_data'] is not None:
                 data=csv_final,
                 file_name="preprocessed_final.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )
 
         with col3:
@@ -289,14 +302,14 @@ if st.session_state['processed_data'] is not None:
                 data=csv_comparison,
                 file_name="preprocessed_comparison.csv",
                 mime="text/csv",
-                use_container_width=True
+                width="stretch"
             )
 
     # Reset button
     st.divider()
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        if st.button("🔄 Process New File", use_container_width=True, type="secondary"):
+        if st.button("🔄 Process New File", width="stretch", type="secondary"):
             # Clear session state
             st.session_state['uploaded_file'] = None
             st.session_state['processed_data'] = None

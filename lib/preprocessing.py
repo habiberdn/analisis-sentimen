@@ -2,6 +2,7 @@ import re
 import nltk
 import pandas as pd
 import streamlit as st
+from functools import lru_cache
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
@@ -19,14 +20,14 @@ _stop_words = set(stopwords.words('indonesian')) - {
 
 __all__ = [
     "read_data",
-    "preprocessing",
     "cleaning_text",
     "tokenizing",
-    "stemming",
     "remove_stopword",
-    "normalize_slang",
+    "normalize_word",
     "preprocessing_batch",
 ]
+
+stem_cache = {}
 
 nltk.download('stopwords', quiet=True)
 nltk.download('punkt_tab', quiet=True)
@@ -35,8 +36,6 @@ nltk.download('punkt_tab', quiet=True)
 _stop_words = set(stopwords.words('indonesian')) - {
     "tidak", "bukan", "belum", "kurang", "tanpa", "jangan"
 }
-
-stem_cache = {}
 
 def load_weighted_lexicon(path: str) -> dict:
     df = pd.read_csv(path)
@@ -63,7 +62,7 @@ def load_slang_dict(path: str) -> dict:
         for slang, formal in zip(df["slang"], df["formal"])
     }
 
-_slang_dict = load_slang_dict("data/slang(1).csv")
+_slang_dict = load_slang_dict("data/slang.csv")
 
 def read_data(file):
     df = pd.read_csv(file)
@@ -74,31 +73,22 @@ def read_data(file):
     )
     return df
 
-@st.cache_data
-def preprocessing(text):
-    """
-    Single text preprocessing pipeline
+def normalize_text(text, slang_dict, lexicon):
+    normalized_words = []
+    score = 0
 
-    Sequence:
-        1. Cleaning (lowercase, remove URLs, special chars)
-        2. Normalization (slang → formal)
-        3. Tokenization
-        4. Stemming
-        5. Stopword Removal
-    """
-    cleaned = cleaning_text(text)
-    normalized = normalize_slang(cleaned)
-    tokenized = tokenizing(normalized)
-    stemmed = stemming(tokenized)
-    stopword_removed = remove_stopword(stemmed)
+    slang_get = slang_dict.get
+    lexicon_get = lexicon.get
 
-    return {
-        "cleaned": cleaned,
-        "normalized": normalized,
-        "tokenized": tokenized,
-        "stemmed": stemmed,
-        "stopword": stopword_removed,
-    }
+    for w in text:
+        norm = slang_get(w, w)
+        normalized_words.append(norm)
+        score += lexicon_get(norm, 0)
+
+    normalized_text = ' '.join(normalized_words)
+    label = score_to_label(score)
+
+    return normalized_text, score, label
 
 @st.cache_data
 def preprocessing_batch(df: pd.DataFrame,text_column: str = 'full_text') -> pd.DataFrame:
@@ -115,33 +105,38 @@ def preprocessing_batch(df: pd.DataFrame,text_column: str = 'full_text') -> pd.D
 
     df = df.drop_duplicates(subset="cleaned").dropna(subset=["cleaned"]).reset_index(drop=True)
 
-    print("Step 2/6: Normalizing slang...")
+    print("Normalizing slang...")
 
     df['normalized'] = df['cleaned'].apply(
+        lambda text: ' '.join(normalize_word(w) for w in text.split())
+    )
+    print("Finish Normalizing slang...")
+
+    df['cleaned'].apply(
         lambda text: ' '.join(_slang_dict.get(w, w) for w in text.split())
     )
-    
+
     df['lexicon_score'] = df['normalized'].apply(
-            lambda text: lexicon_score(text, lexicon) 
+            lambda text: lexicon_score(text, lexicon)
         )
     df['target'] = df['lexicon_score'].apply(score_to_label)
 
-    print("Step 3/6: Tokenizing...")
     df['tokenized'] = df['normalized'].str.split()
 
-    print("Step 4/6: Stopword...")
     df['stopword'] = df['tokenized'].apply(remove_stopword)
 
-    print("Step 5/6: Stemming...")
-    def batch_stem(words: list) -> str:
-        if words not in stem_cache:
-               stem_cache[words] = _stemmer.stem(words)
-        return stem_cache[words]
+    print("Stemming...")
+    def stem_word(word: str) -> str:    
+        if word not in stem_cache:
+            stem_cache[word] = _stemmer.stem(word)
+        return stem_cache[word]
 
-    def stemming_cached(text):
-        return ' '.join([batch_stem(w) for w in text])
+    def stemming_cached(words: list) -> str:
+        return ' '.join(stem_word(w) for w in words)
 
     df['stemmed'] = df['stopword'].apply(stemming_cached)
+    df = df[df['stemmed'] != ""].reset_index(drop=True)
+    print("Finish Stemming...")
 
     return df
 
@@ -159,19 +154,11 @@ def tokenizing(teks):
     text = word_tokenize(teks)
     return  " ".join(text)
 
-def stemming(text):
-    """Remove affixes from words using Sastrawi stemmer"""
-    stemmed = [_stemmer.stem(word) for word in text]
-    return " ".join(stemmed)
-
 def remove_stopword(text):
-    """Remove common words that don't carry sentiment (except negations)"""
-    filtered_text = [word for word in text if word not in _stop_words]
-    return ' '.join(filtered_text)
+    return [word for word in text if word not in _stop_words]
 
-def normalize_slang(text: str) -> str:
+@lru_cache(maxsize=100_000)
+def normalize_word(text: str) -> str:
     """Convert slang words to formal Indonesian based on dictionary"""
-    return " ".join(
-        _slang_dict.get(word, word)
-        for word in text.split()
+    return ' '.join(_slang_dict.get(w, w) for w in text.split()
     )

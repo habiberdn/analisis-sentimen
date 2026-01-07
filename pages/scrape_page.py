@@ -18,9 +18,9 @@ col1, col2  = st.columns(2, gap="small")
 csv_data = st.session_state.df.to_csv(index=False) if st.session_state.df is not None else ""
 
 with col1:
-    scrape_btn = st.button("Scrape",use_container_width=True)
+    scrape_btn = st.button("Scrape",width="stretch")
 with col2:
-    export_btn = st.download_button(label="Download as CSV",use_container_width=True,disabled=st.session_state.disabled,file_name="cek_kesehatan_gratis.csv",
+    export_btn = st.download_button(label="Download as CSV",width="stretch",disabled=st.session_state.disabled,file_name="cek_kesehatan_gratis.csv",
     mime="text/csv", data=csv_data)
 
 if scrape_btn:
