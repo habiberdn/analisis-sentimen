@@ -62,7 +62,7 @@ def load_slang_dict(path: str) -> dict:
         for slang, formal in zip(df["slang"], df["formal"])
     }
 
-_slang_dict = load_slang_dict("data/slang.csv")
+_slang_dict = load_slang_dict("data/kamus_alay_sorted.csv")
 
 def read_data(file):
     df = pd.read_csv(file)
@@ -96,8 +96,9 @@ def preprocessing_batch(df: pd.DataFrame,text_column: str = 'full_text') -> pd.D
        Optimized batch preprocessing for entire DataFrame.
        Much faster than row-by-row processing.
     """
-    df['cleaned'] = df[text_column].astype(str).str.lower()
-    df['cleaned'] = df['cleaned'].str.replace(r"http\S+|www\S+|https\S+", '', regex=True)
+
+    df['case_folding'] = df[text_column].astype(str).str.lower()
+    df['cleaned'] = df['case_folding'].str.replace(r"http\S+|www\S+|https\S+", '', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'@\w+|#\w+', '', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'[^a-z\s]', '', regex=True)
     df['cleaned'] = df['cleaned'].str.replace(r'(.)\1{2,}', r'\1', regex=True)
@@ -112,7 +113,7 @@ def preprocessing_batch(df: pd.DataFrame,text_column: str = 'full_text') -> pd.D
     )
     print("Finish Normalizing slang...")
 
-    df['cleaned'].apply(
+    df['normalized'].apply(
         lambda text: ' '.join(_slang_dict.get(w, w) for w in text.split())
     )
 
@@ -121,27 +122,26 @@ def preprocessing_batch(df: pd.DataFrame,text_column: str = 'full_text') -> pd.D
         )
     df['target'] = df['lexicon_score'].apply(score_to_label)
 
-    df['tokenized'] = df['normalized'].str.split()
+    df['tokenized'] = df['normalized'].apply(tokenizing)
 
     df['stopword'] = df['tokenized'].apply(remove_stopword)
 
     print("Stemming...")
-    def stem_word(word: str) -> str:    
+    def stem_word(word: str) -> str:
         if word not in stem_cache:
             stem_cache[word] = _stemmer.stem(word)
         return stem_cache[word]
 
     def stemming_cached(words: list) -> str:
-        return ' '.join(stem_word(w) for w in words)
+        return [stem_word(word) for word in words]
 
     df['stemmed'] = df['stopword'].apply(stemming_cached)
     df = df[df['stemmed'] != ""].reset_index(drop=True)
     print("Finish Stemming...")
-
     return df
 
 def cleaning_text(teks: str) -> str:
-    """Remove URLs, mentions, hashtags, special characters, and normalize repeated chars"""
+    """Remove URLs, mentions, hashtags, remove special characters (non alphabets e.g angka, tanda baca, emoji, simbol)  , and normalize repeated chars"""
     teks = str(teks).lower()
     teks = re.sub(r"http\S+|www\S+|https\S+|@\w+|#\w+", '', teks)
     teks = re.sub(r'[^a-z\s]', '', teks)
@@ -152,13 +152,15 @@ def cleaning_text(teks: str) -> str:
 def tokenizing(teks):
     """Split text into individual words"""
     text = word_tokenize(teks)
-    return  " ".join(text)
+    return text
 
 def remove_stopword(text):
-    return [word for word in text if word not in _stop_words]
+    return  [word for word in text if word not in _stop_words]
 
 @lru_cache(maxsize=100_000)
 def normalize_word(text: str) -> str:
     """Convert slang words to formal Indonesian based on dictionary"""
     return ' '.join(_slang_dict.get(w, w) for w in text.split()
     )
+
+
