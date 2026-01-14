@@ -13,9 +13,9 @@ def lexicon_score(text: str, lexicon: dict) -> int:
 
 
 def score_to_label(score: int) -> str:
-    if score > 2:
+    if score > 1:
         return "positif"
-    elif score < -2:
+    elif score < -1:
         return "negatif"
     else:
         return "netral"
