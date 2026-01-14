@@ -59,7 +59,7 @@ if st.session_state['uploaded_file'] is not None:
 
 
 if st.session_state['processed_data'] is not None:
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["Cleaned Data", "Normalize", "Tokenized", "Stemming","Stopword", "Overview"])
+    tab1, tab2, tab3, tab4, tab5, tab6,tab7 = st.tabs(["Case Folding","Cleaned Data", "Normalize", "Tokenized", "Stopword","Stemming", "Overview"])
     data = st.session_state["processed_data"]
     with tab1:
         col1, col2 = st.columns(2)
@@ -71,6 +71,23 @@ if st.session_state['processed_data'] is not None:
                 height=400
             )
         with col2:
+            st.markdown("**🟢 Case Folded**")
+            st.dataframe(
+                data[['case_folding']],
+                width="stretch",
+                height=400
+            )
+
+    with tab2:
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("**🔴 Original**")
+            st.dataframe(
+                data['case_folding'].head(10),
+                width="stretch",
+                height=400
+            )
+        with col2:
             st.markdown("**🟢 Cleaned**")
             st.dataframe(
                 data[['cleaned']],
@@ -78,7 +95,7 @@ if st.session_state['processed_data'] is not None:
                 height=400
             )
 
-    with tab2:
+    with tab3:
         normalized_texts = data[data['cleaned'] != data['normalized']]
 
         if len(normalized_texts) > 0:
@@ -88,7 +105,7 @@ if st.session_state['processed_data'] is not None:
             with col1:
                 st.markdown("**Sebelum Normalization**")
                 st.dataframe(
-                    normalized_texts[['cleaned']].head(10),
+                    normalized_texts['cleaned'].head(10),
                     width="stretch",
                     height=400
                 )
@@ -102,7 +119,7 @@ if st.session_state['processed_data'] is not None:
         else:
             st.info("Tidak ada perubahaan akibat normalisasi")
 
-    with tab3:
+    with tab4:
         # Calculate token statistics
         data['token_count'] = data['tokenized'].apply(len)
 
@@ -118,13 +135,75 @@ if st.session_state['processed_data'] is not None:
         st.markdown("**Perbandingan Text :**")
         comparison_df = pd.DataFrame({
             "Normalized": data['normalized'].head(10),
-            "Tokenized": data['tokenized'].head(10).apply(lambda x: ' '.join(x)),
+            "Tokenized": data['tokenized'].head(10),
             "Token Count": data['token_count'].head(10)
         })
         st.dataframe(comparison_df, width="stretch")
+        with tab5:
+            # Tab 5: Stopwords Removed (Final)
+                st.subheader("Step 5: Stopword Removal")
+                st.markdown("**Operation:** Remove common words with little semantic meaning")
 
-    # Tab 4: Stemmed
-    with tab4:
+                data['words_before_stopword'] = data['stemmed'].apply(len)
+                data['words_after_stopword'] = data['stopword'].apply(len)
+                data['words_removed'] = (
+                    data['words_before_stopword'] - data['words_after_stopword']
+                )
+
+                col1, col2, col3 = st.columns(3)
+
+                with col1:
+                    total_before = data['words_before_stopword'].sum()
+                    st.metric("📊 Words Before", f"{total_before:,}")
+
+                with col2:
+                    total_after = data['words_after_stopword'].sum()
+                    st.metric("📊 Words After", f"{total_after:,}")
+
+                with col3:
+                    reduction_pct = (
+                        (total_before - total_after) / total_before * 100
+                        if total_before > 0 else 0
+                    )
+                    st.metric("📉 Reduction", f"{reduction_pct:.1f}%")
+
+                st.markdown("**Sample Results:**")
+
+                comparison_df = data[[
+                    'tokenized',
+                    'stopword',
+                    'words_removed'
+                ]].head(10)
+
+                comparison_df.columns = [
+                    'Before Stopword Removal',
+                    'After Stopword Removal',
+                    'Words Removed'
+                ]
+
+                st.dataframe(comparison_df, width="stretch")
+
+                with st.expander("🔍 Most Removed Stopwords"):
+                    all_removed = []
+
+                    for _, row in data.iterrows():
+                        before_words = set(row['tokenized'])
+                        after_words = set(row['stopword'])
+                        removed = before_words - after_words
+                        all_removed.extend(removed)
+
+                    if all_removed:
+                        from collections import Counter
+                        top_removed = Counter(all_removed).most_common(20)
+
+                        removed_df = pd.DataFrame(
+                            top_removed,
+                            columns=['Word', 'Frequency']
+                        )
+
+                        st.bar_chart(removed_df.set_index('Word'))
+    # Tab 6: Stemmed
+    with tab6:
         st.subheader("Step 4: Stemmed Text")
         st.markdown("**Operation:** Remove prefixes and suffixes from words")
 
@@ -132,87 +211,22 @@ if st.session_state['processed_data'] is not None:
         with col1:
             st.markdown("**Before Stemming**")
             st.dataframe(
-                data['tokenized']
+                data['stopword']
                     .head(10)
-                    .apply(lambda x: ' '.join(x))
-                    .to_frame(name="tokenized"),
+                    .to_frame(name="stopword"),
                 width="stretch",
                 height=400
             )
         with col2:
             st.markdown("**After Stemming**")
             st.dataframe(
-                data[['stemmed']].head(10),
+                data['stemmed'].head(10),
                 width="stretch",
                 height=400
             )
 
-    # Tab 5: Stopwords Removed (Final)
-    with tab5:
-        st.subheader("Step 5: Stopword Removal")
-        st.markdown("**Operation:** Remove common words with little semantic meaning")
-    
-        data['words_before_stopword'] = data['tokenized'].apply(len)
-        data['words_after_stopword'] = data['stopword'].apply(len)
-        data['words_removed'] = (
-            data['words_before_stopword'] - data['words_after_stopword']
-        )
-    
-        col1, col2, col3 = st.columns(3)
-    
-        with col1:
-            total_before = data['words_before_stopword'].sum()
-            st.metric("📊 Words Before", f"{total_before:,}")
-    
-        with col2:
-            total_after = data['words_after_stopword'].sum()
-            st.metric("📊 Words After", f"{total_after:,}")
-    
-        with col3:
-            reduction_pct = (
-                (total_before - total_after) / total_before * 100
-                if total_before > 0 else 0
-            )
-            st.metric("📉 Reduction", f"{reduction_pct:.1f}%")
-    
-        st.markdown("**Sample Results:**")
-    
-        comparison_df = data[[
-            'tokenized',
-            'stopword',
-            'words_removed'
-        ]].head(10)
-    
-        comparison_df.columns = [
-            'Before Stopword Removal',
-            'After Stopword Removal',
-            'Words Removed'
-        ]
-    
-        st.dataframe(comparison_df, width="stretch")
-    
-        with st.expander("🔍 Most Removed Stopwords"):
-            all_removed = []
-    
-            for _, row in data.iterrows():
-                before_words = set(row['tokenized'])
-                after_words = set(row['stopword'])
-                removed = before_words - after_words
-                all_removed.extend(removed)
-    
-            if all_removed:
-                from collections import Counter
-                top_removed = Counter(all_removed).most_common(20)
-    
-                removed_df = pd.DataFrame(
-                    top_removed,
-                    columns=['Word', 'Frequency']
-                )
-    
-                st.bar_chart(removed_df.set_index('Word'))
-
-    # Tab 6: Overview
-    with tab6:
+    # Tab 7: Overview
+    with tab7:
         st.subheader("📈 Complete Processing Overview")
 
         # Summary statistics
@@ -231,23 +245,6 @@ if st.session_state['processed_data'] is not None:
             size_reduction = (1 - avg_final / avg_original) * 100
             st.metric("📉 Size Reduction", f"{size_reduction:.1f}%")
 
-        # Processing pipeline visualization
-        st.markdown("### 🔄 Processing Pipeline Impact")
-
-        pipeline_stats = pd.DataFrame({
-            'Stage': ['Original', 'Cleaned', 'Normalized', 'Tokenized', 'Stemmed', 'Final'],
-            'Avg Length': [
-                data['full_text'].str.len().mean(),
-                data['cleaned'].str.len().mean(),
-                data['normalized'].str.len().mean(),
-                data['tokenized'].apply(len).mean(),
-                data['stemmed'].str.split().apply(len).mean(),
-                data['stopword'].apply(len).mean()
-            ]
-        })
-
-        st.line_chart(pipeline_stats.set_index('Stage'))
-
         # Sample comparison
         st.markdown("### 🔬 Sample Text Transformation")
         sample_idx = st.selectbox("Select sample to view:", range(min(20, len(data))))
@@ -258,9 +255,9 @@ if st.session_state['processed_data'] is not None:
                 "1️⃣ Original": sample['full_text'],
                 "2️⃣ Cleaned": sample['cleaned'],
                 "3️⃣ Normalized": sample['normalized'],
-                "4️⃣ Tokenized": ' '.join(sample['tokenized']),
+                "4️⃣ Tokenized": sample['tokenized'],
                 "5️⃣ Stemmed": sample['stemmed'],
-                "6️⃣ Final":' '.join(sample['stopword'])
+                "6️⃣ Final":sample['stemmed']
             }
 
             for stage, text in stages.items():

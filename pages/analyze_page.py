@@ -82,8 +82,9 @@ if st.button("🚀 Mulai Training", type="primary", use_container_width=True):
         X_train_balanced, y_train_balanced = smote.fit_resample(
             X_train_tfidf, y_train
         )
+        
 
-        model = MultinomialNB()
+        model = MultinomialNB(alpha=0.1)
         model.fit(X_train_balanced, y_train_balanced)
 
         y_test_pred = model.predict(X_test_tfidf)
