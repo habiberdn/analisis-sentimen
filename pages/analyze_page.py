@@ -1,165 +1,13 @@
 import streamlit as st
 import pandas as pd
-from typing import cast
-from scipy.sparse import csr_matrix
 from sklearn.model_selection import train_test_split
-from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
-from sklearn.naive_bayes import ComplementNB, MultinomialNB
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.naive_bayes import MultinomialNB
 from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 import matplotlib.pyplot as plt
 from imblearn.over_sampling import SMOTE
 import seaborn as sns
 import numpy as np
-
-def calculate_naive_bayes_manual(X_train, y_train, X_test, y_test, count_vectorizer, tf_count_df_train, tf_count_df_test):
-    """
-    Menghitung Naive Bayes secara manual dengan rumus BENAR:
-    P(word|Class) = (count(word,Class) + α) / (Σ count(word',Class) + α × |V|)
-    Posterior = Prior × Likelihood
-
-    Dalam log:
-    log(Posterior) = log(Prior) + Σ count(word) × log(Likelihood)
-    """
-
-    # 1. Prior Probability P(Class)
-    class_counts = y_train.value_counts().sort_index()
-    total_docs = len(y_train)
-    prior = class_counts / total_docs
-
-    st.write("### 1️⃣ Prior Probability P(Class)")
-    st.write("**Rumus:** P(Class) = Jumlah dokumen kelas / Total dokumen")
-    prior_df = pd.DataFrame({
-        'Class': prior.index,
-        'Count': class_counts.values,
-        'Prior P(Class)': prior.values
-    })
-    st.dataframe(prior_df)
-
-    # 2. Likelihood P(word|class) dengan Laplace Smoothing - RUMUS BENAR
-    alpha = 1.0  # Laplace smoothing (standar = 1)
-    classes = sorted(y_train.unique())
-    vocabulary_size = len(count_vectorizer.get_feature_names_out())
-
-    st.write("### 2️⃣ Likelihood P(word|Class) dengan Laplace Smoothing")
-    st.write("**Rumus:** P(word|Class) = (count(word,Class) + α) / (Σ count(word',Class) + α × |V|)")
-    st.write(f"**Parameter:** α (alpha) = {alpha}, |V| (vocabulary size) = {vocabulary_size}")
-
-    likelihood = {}
-    likelihood_info = []
-
-    for c in classes:
-        idx = y_train == c
-
-        # Hitung total kemunculan setiap kata dalam kelas c (TANPA smoothing dulu)
-        raw_word_count = tf_count_df_train.loc[idx].sum(axis=0)
-        # Total kata dalam kelas c (dengan smoothing)
-        # RUMUS BENAR: Σ count(word',C) + α × |V|
-        total_words_in_class = raw_word_count.sum() + (alpha * vocabulary_size)
-
-        # Likelihood untuk setiap kata
-        # RUMUS BENAR: (count(word,C) + α) / (Σ count(word',C) + α × |V|)
-        likelihood[c] = (raw_word_count + alpha) / total_words_in_class
-
-        likelihood_info.append({
-            'Class': c,
-            'Σ count(word\',C) [raw]': raw_word_count.sum(),
-            'α × |V|': alpha * vocabulary_size,
-            'Total [denominator]': total_words_in_class
-        })
-
-    st.write("**Perhitungan denominator untuk setiap kelas:**")
-    st.dataframe(pd.DataFrame(likelihood_info))
-
-    likelihood_df = pd.DataFrame(likelihood)
-    st.write("**Likelihood P(word|Class) untuk setiap term:**")
-    st.dataframe(likelihood_df)
-
-    # Verifikasi: sum dari semua likelihood harus = 1 untuk setiap class
-    st.write("**Verifikasi:** Σ P(word|Class) untuk setiap kelas (harus ≈ 1.0):")
-    verification = likelihood_df.sum()
-    st.dataframe(verification.rename("Sum of Likelihoods").reset_index().rename(columns={"index": "Class"}))
-
-    # 3. Posterior Probability untuk TRAINING data
-    st.write("### 3️⃣ Posterior Probability (TRAINING)")
-    st.write("**Rumus:** log P(Class|Doc) = log P(Class) + Σ count(word) × log P(word|Class)")
-
-    posteriors_train = []
-    posterior_details = []
-
-    for idx, row in tf_count_df_train.iterrows():
-        doc_post = {}
-        doc_detail = {'doc_index': idx}
-
-        for c in classes:
-            # log(Prior)
-            log_prior = np.log(prior[c])
-            # log(Likelihood) untuk setiap kata
-            log_likelihood = np.log(likelihood[c])
-            # Posterior = Prior × ∏ Likelihood^count
-            # Log Posterior = log(Prior) + Σ count × log(Likelihood)
-            log_likelihood_sum = (row * log_likelihood).sum()
-            log_posterior = log_prior + log_likelihood_sum
-
-            doc_post[c] = log_posterior
-            doc_detail[f'log_prior_C{c}'] = log_prior
-            doc_detail[f'sum_log_lik_C{c}'] = log_likelihood_sum
-            doc_detail[f'log_post_C{c}'] = log_posterior
-
-        posteriors_train.append(doc_post)
-        posterior_details.append(doc_detail)
-
-    posterior_df_train = pd.DataFrame(posteriors_train)
-    st.write("**Log Posterior untuk setiap dokumen training:**")
-    st.dataframe(posterior_df_train)
-
-    with st.expander("📊 Detail Perhitungan Posterior"):
-        st.dataframe(pd.DataFrame(posterior_details))
-
-    # 4. Prediksi TRAINING
-    pred_manual_train = posterior_df_train.idxmax(axis=1).values
-    accuracy_train = (pred_manual_train == y_train.values).mean()
-
-    st.write("### 4️⃣ Prediksi pada Data TRAINING")
-    train_results = pd.DataFrame({
-        "Teks": X_train.values,
-        "Label Sebenarnya": y_train.values,
-        "Prediksi": pred_manual_train,
-        "Benar": pred_manual_train == y_train.values
-    })
-    st.dataframe(train_results)
-
-    # 5. Posterior Probability untuk TESTING data
-    st.write("### 5️⃣ Posterior Probability (TESTING)")
-    st.write("Menggunakan Prior dan Likelihood yang sama dari data training")
-
-    posteriors_test = []
-    for idx, row in tf_count_df_test.iterrows():
-        doc_post = {}
-        for c in classes:
-            log_prior = np.log(prior[c])
-            log_likelihood = np.log(likelihood[c])
-            log_posterior = log_prior + (row * log_likelihood).sum()
-            doc_post[c] = log_posterior
-        posteriors_test.append(doc_post)
-
-    posterior_df_test = pd.DataFrame(posteriors_test)
-    st.write("**Log Posterior untuk setiap dokumen testing:**")
-    st.dataframe(posterior_df_test)
-
-    # 6. Prediksi TESTING
-    pred_manual_test = posterior_df_test.idxmax(axis=1).values
-    accuracy_test = (pred_manual_test == y_test.values).mean()
-
-    st.write("### 6️⃣ Prediksi pada Data TESTING")
-    test_results = pd.DataFrame({
-        "Teks": X_test.values,
-        "Label Sebenarnya": y_test.values,
-        "Prediksi": pred_manual_test,
-        "Benar": pred_manual_test == y_test.values
-    })
-    st.dataframe(test_results)
-
-    return pred_manual_train, pred_manual_test
 
 st.title("🔍 Klasifikasi Teks - Multinomial Naive Bayes")
 st.markdown("---")
@@ -381,7 +229,6 @@ if st.button("🚀 Mulai Training", type="primary", use_container_width=True):
         )
         vectorizer = TfidfVectorizer(
             max_features=max_features,
-            ngram_range=(1, 2),
             token_pattern=r'(?u)\b\w+\b',
             min_df=3,
             max_df=0.8,
@@ -404,93 +251,16 @@ if st.button("🚀 Mulai Training", type="primary", use_container_width=True):
 
     st.success(f"✅ Training selesai | Akurasi: {accuracy:.2%}")
 
-    # ================= PERHITUNGAN MANUAL NAIVE BAYES (10 TWEET PERTAMA) =================
-    with st.expander("📐 Perhitungan Manual Naive Bayes", expanded=False):
-        st.info("📌 Perhitungan manual ini menggunakan 10 tweet pertama dari dataset asli (8 training + 2 testing)")
-        st.markdown("---")
-
-        st.markdown("""
-        **Rumus Naive Bayes Multinomial:**
-        - P(word|Class) = (count(word,Class) + α) / (Σ count(word',Class) + α × |V|)
-        - P(Class|Doc) ∝ P(Class) × ∏ P(word|Class)^count(word)
-        - Log form: log P(Class|Doc) = log P(Class) + Σ count(word) × log P(word|Class)
-        """)
-
-        # Ambil 10 data PERTAMA dari dataset asli (sebelum split)
-        df_10_first = df.head(10).copy()
-        X_10_all = df_10_first['stemmed'].astype(str).reset_index(drop=True)
-        y_10_all = df_10_first['target'].reset_index(drop=True)
-
-        # Split manual: 8 untuk training, 2 untuk testing
-        X_train_10 = X_10_all.head(8).reset_index(drop=True)
-        y_train_10 = y_10_all.head(8).reset_index(drop=True)
-        X_test_2 = X_10_all.tail(2).reset_index(drop=True)
-        y_test_2 = y_10_all.tail(2).reset_index(drop=True)
-
-        st.write("**Data Training (8 tweet pertama dari dataset):**")
-        preview_df_train = pd.DataFrame({
-            'Index': range(1, 9),
-            'Teks': X_train_10.values,
-            'Label': y_train_10.values
-        })
-        st.dataframe(preview_df_train, use_container_width=True)
-
-        st.write("**Data Testing (2 tweet berikutnya dari dataset):**")
-        preview_df_test = pd.DataFrame({
-            'Index': range(9, 11),
-            'Teks': X_test_2.values,
-            'Label': y_test_2.values
-        })
-        st.dataframe(preview_df_test, use_container_width=True)
-
-        st.markdown("---")
-        st.write("## 🔢 Feature Extraction dengan Count Vectorizer")
-        st.write("Naive Bayes Multinomial menggunakan **count** (bukan TF-IDF)")
-
-        # Count Vectorizer untuk 10 data pertama
-        count_vectorizer = CountVectorizer(
-            ngram_range=(1, 1),
-            token_pattern=r'(?u)\b\w+\b',
-            min_df=1,
-            max_df=1.0
-        )
-
-        X_count_train_10 = count_vectorizer.fit_transform(X_train_10)
-        X_count_test_2 = count_vectorizer.transform(X_test_2)
-
-        tf_count_df_train_10 = pd.DataFrame(
-            X_count_train_10.toarray(),
-            columns=count_vectorizer.get_feature_names_out()
-        ).reset_index(drop=True)
-        tf_count_df_test_2 = pd.DataFrame(
-            X_count_test_2.toarray(),
-            columns=count_vectorizer.get_feature_names_out()
-        ).reset_index(drop=True)
-
-        st.write("**Term Frequency (Count) - Training (10 tweets):**")
-        st.dataframe(tf_count_df_train_10, use_container_width=True)
-
-        st.write("**Term Frequency (Count) - Testing (2 tweets):**")
-        st.dataframe(tf_count_df_test_2, use_container_width=True)
-
-        st.markdown("---")
-        st.write("## 🧮 Perhitungan Naive Bayes Manual")
-
-        # Hitung Naive Bayes manual
-        calculate_naive_bayes_manual(
-            X_train_10, y_train_10, X_test_2, y_test_2,
-            count_vectorizer, tf_count_df_train_10, tf_count_df_test_2
-        )
+    with st.expander("📐 Perhitungan TF-IDF", expanded=False):
+        print("")
 
     # ================= REPORT =================
     with st.expander("📊 Classification Report"):
-        tab1, tab2 = st.tabs(["Testing", "Training"])
+        tab1, = st.tabs(["Testing"])
         with tab1:
             report = classification_report(y_test, y_test_pred, output_dict=True)
             st.dataframe(pd.DataFrame(report).transpose(), use_container_width=True)
-        with tab2:
-            report = classification_report(y_train, y_train_pred, output_dict=True)
-            st.dataframe(pd.DataFrame(report).transpose(), use_container_width=True)
+
 
     # ================= CONFUSION MATRIX IMPROVED =================
     st.subheader("🔲 Confusion Matrix")

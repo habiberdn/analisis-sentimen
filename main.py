@@ -112,5 +112,8 @@ st.markdown("""
         button[aria-label="Close"] {
             display: none !important;
         }
+        
+        sisition : fixed; 
+        }
     </style>
 """, unsafe_allow_html=True)
